@@ -136,7 +136,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 wtxn,
                 index_is_empty,
                 deladd_serialize_add_side,
-                merge_cbo_roaring_bitmaps,
+                merge_deladd_cbo_roaring_bitmaps,
             )?;
             is_merged_database = true;
         }
@@ -155,7 +155,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 wtxn,
                 index_is_empty,
                 deladd_serialize_add_side,
-                merge_cbo_roaring_bitmaps,
+                merge_deladd_cbo_roaring_bitmaps,
             )?;
 
             let exact_word_docids_iter = unsafe { as_cloneable_grenad(&exact_word_docids_reader) }?;
@@ -165,7 +165,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 wtxn,
                 index_is_empty,
                 deladd_serialize_add_side,
-                merge_cbo_roaring_bitmaps,
+                merge_deladd_cbo_roaring_bitmaps,
             )?;
 
             let word_fid_docids_iter = unsafe { as_cloneable_grenad(&word_fid_docids_reader) }?;
@@ -175,7 +175,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 wtxn,
                 index_is_empty,
                 deladd_serialize_add_side,
-                merge_cbo_roaring_bitmaps,
+                merge_deladd_cbo_roaring_bitmaps,
             )?;
 
             // create fst from word docids
@@ -197,7 +197,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 wtxn,
                 index_is_empty,
                 deladd_serialize_add_side,
-                merge_cbo_roaring_bitmaps,
+                merge_deladd_cbo_roaring_bitmaps,
             )?;
             is_merged_database = true;
         }
@@ -218,7 +218,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 wtxn,
                 index_is_empty,
                 deladd_serialize_add_side,
-                merge_cbo_roaring_bitmaps,
+                merge_deladd_cbo_roaring_bitmaps,
             )?;
             is_merged_database = true;
         }
@@ -229,7 +229,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 wtxn,
                 index_is_empty,
                 deladd_serialize_add_side,
-                merge_cbo_roaring_bitmaps,
+                merge_deladd_cbo_roaring_bitmaps,
             )?;
             is_merged_database = true;
         }
@@ -240,7 +240,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 wtxn,
                 index_is_empty,
                 deladd_serialize_add_side,
-                merge_cbo_roaring_bitmaps,
+                merge_deladd_cbo_roaring_bitmaps,
             )?;
             is_merged_database = true;
         }
@@ -251,7 +251,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 wtxn,
                 index_is_empty,
                 deladd_serialize_add_side,
-                merge_cbo_roaring_bitmaps,
+                merge_deladd_cbo_roaring_bitmaps,
             )?;
             is_merged_database = true;
         }
@@ -389,24 +389,6 @@ fn merge_word_docids_reader_into_fst(
     Ok(builder.into_set())
 }
 
-fn merge_roaring_bitmaps(new_value: &[u8], db_value: &[u8], buffer: &mut Vec<u8>) -> Result<()> {
-    let new_value = RoaringBitmap::deserialize_from(new_value)?;
-    let db_value = RoaringBitmap::deserialize_from(db_value)?;
-    let value = new_value | db_value;
-    Ok(serialize_roaring_bitmap(&value, buffer)?)
-}
-
-fn merge_cbo_roaring_bitmaps(
-    new_value: &[u8],
-    db_value: &[u8],
-    buffer: &mut Vec<u8>,
-) -> Result<()> {
-    Ok(CboRoaringBitmapCodec::merge_into(
-        &[Cow::Borrowed(db_value), Cow::Borrowed(new_value)],
-        buffer,
-    )?)
-}
-
 /// A function that extracts and returns the Add side of a DelAdd obkv.
 /// This is useful when there are no previous value in the database and
 /// therefore we don't need to do a diff with what's already there.
@@ -415,6 +397,22 @@ fn merge_cbo_roaring_bitmaps(
 /// which is a valid CboRoaringBitmap.
 fn deladd_serialize_add_side<'a>(obkv: &'a [u8], _buffer: &mut Vec<u8>) -> Result<&'a [u8]> {
     Ok(KvReaderDelAdd::new(obkv).get(DelAdd::Addition).unwrap_or_default())
+}
+
+/// A function that merges a DelAdd of bitmao into an already existing bitmap.
+///
+/// The first argument is the DelAdd obkv of CboRoaringBitmaps and
+/// the second one is the CboRoaringBitmap to merge into.
+fn merge_deladd_cbo_roaring_bitmaps(
+    deladd_obkv: &[u8],
+    previous: &[u8],
+    buffer: &mut Vec<u8>,
+) -> Result<()> {
+    Ok(CboRoaringBitmapCodec::merge_deladd_into(
+        KvReaderDelAdd::new(deladd_obkv),
+        previous,
+        buffer,
+    )?)
 }
 
 /// Write provided entries in database using serialize_value function.
